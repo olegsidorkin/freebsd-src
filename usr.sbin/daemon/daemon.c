@@ -98,6 +98,7 @@ struct daemon_state {
 	bool log_reopen;
 	int restart_count;
 	int restarted_count;
+	bool parent_pid_file_readable;
 };
 
 static void restrict_process(const char *);
@@ -118,7 +119,7 @@ static int daemon_setup_kqueue(void);
 
 static int pidfile_truncate(struct pidfh *);
 
-static const char shortopts[] = "+cfHSp:P:ru:o:s:l:t:m:R:T:C:h";
+static const char shortopts[] = "+cfHSGp:P:ru:o:s:l:t:m:R:T:C:h";
 
 static const struct option longopts[] = {
 	{ "change-dir",         no_argument,            NULL,           'c' },
@@ -129,6 +130,7 @@ static const struct option longopts[] = {
 	{ "output-mask",        required_argument,      NULL,           'm' },
 	{ "child-pidfile",      required_argument,      NULL,           'p' },
 	{ "supervisor-pidfile", required_argument,      NULL,           'P' },
+	{ "supervisor-pidfile-readable",	no_argument,    NULL,           'G' },
 	{ "restart",            no_argument,            NULL,           'r' },
 	{ "restart-count",      required_argument,      NULL,           'C' },
 	{ "restart-delay",      required_argument,      NULL,           'R' },
@@ -153,24 +155,25 @@ usage(int exitcode)
 	    "command arguments ...\n");
 
 	(void)fprintf(stderr,
-	    "  --change-dir         -c         Change the current working directory to root\n"
-	    "  --close-fds          -f         Set stdin, stdout, stderr to /dev/null\n"
-	    "  --sighup             -H         Close and re-open output file on SIGHUP\n"
-	    "  --syslog             -S         Send output to syslog\n"
-	    "  --output-file        -o <file>  Append output of the child process to file\n"
-	    "  --output-mask        -m <mask>  What to send to syslog/file\n"
-	    "                                  1=stdout, 2=stderr, 3=both\n"
-	    "  --child-pidfile      -p <file>  Write PID of the child process to file\n"
-	    "  --supervisor-pidfile -P <file>  Write PID of the supervisor process to file\n"
-	    "  --restart            -r         Restart child if it terminates (1 sec delay)\n"
-	    "  --restart-count      -C <N>     Restart child at most N times, then exit\n"
-	    "  --restart-delay      -R <N>     Restart child if it terminates after N sec\n"
-	    "  --title              -t <title> Set the title of the supervisor process\n"
-	    "  --user               -u <user>  Drop privileges, run as given user\n"
-	    "  --syslog-priority    -s <prio>  Set syslog priority\n"
-	    "  --syslog-facility    -l <flty>  Set syslog facility\n"
-	    "  --syslog-tag         -T <tag>   Set syslog tag\n"
-	    "  --help               -h         Show this help\n");
+	    "  --change-dir                  -c         Change the current working directory to root\n"
+	    "  --close-fds                   -f         Set stdin, stdout, stderr to /dev/null\n"
+	    "  --sighup                      -H         Close and re-open output file on SIGHUP\n"
+	    "  --syslog                      -S         Send output to syslog\n"
+	    "  --output-file                 -o <file>  Append output of the child process to file\n"
+	    "  --output-mask                 -m <mask>  What to send to syslog/file\n"
+	    "                                          1=stdout, 2=stderr, 3=both\n"
+	    "  --child-pidfile               -p <file>  Write PID of the child process to file\n"
+	    "  --supervisor-pidfile          -P <file>  Write PID of the supervisor process to file\n"
+	    "  --supervisor-pidfile-readable -G         Use 644 permission mask for supervisor process pidfile\n"
+	    "  --restart                     -r         Restart child if it terminates (1 sec delay)\n"
+	    "  --restart-count               -C <N>     Restart child at most N times, then exit\n"
+	    "  --restart-delay               -R <N>     Restart child if it terminates after N sec\n"
+	    "  --title                       -t <title> Set the title of the supervisor process\n"
+	    "  --user                        -u <user>  Drop privileges, run as given user\n"
+	    "  --syslog-priority             -s <prio>  Set syslog priority\n"
+	    "  --syslog-facility             -l <flty>  Set syslog facility\n"
+	    "  --syslog-tag                  -T <tag>   Set syslog tag\n"
+	    "  --help                        -h         Show this help\n");
 
 	exit(exitcode);
 }
@@ -222,6 +225,9 @@ main(int argc, char *argv[])
 			break;
 		case 'H':
 			state.log_reopen = true;
+			break;
+		case 'G':
+			state.parent_pid_file_readable = true;
 			break;
 		case 'l':
 			state.syslog_facility = get_log_mapping(optarg,
@@ -606,6 +612,7 @@ static void
 open_pid_files(struct daemon_state *state)
 {
 	pid_t fpid;
+	mode_t parent_pidfh_mode = state->parent_pid_file_readable ? 0644 : 0600;
 	int serrno;
 
 	if (state->child_pidfile) {
@@ -620,7 +627,7 @@ open_pid_files(struct daemon_state *state)
 	}
 	/* Do the same for the actual daemon process. */
 	if (state->parent_pidfile) {
-		state->parent_pidfh= pidfile_open(state->parent_pidfile, 0600, &fpid);
+		state->parent_pidfh = pidfile_open(state->parent_pidfile, parent_pidfh_mode, &fpid);
 		if (state->parent_pidfh == NULL) {
 			serrno = errno;
 			pidfile_remove(state->child_pidfh);
@@ -805,7 +812,8 @@ daemon_state_init(struct daemon_state *state)
 		.output_fd = -1,
 		.output_filename = NULL,
 		.restart_count = -1,
-		.restarted_count = 0
+		.restarted_count = 0,
+		.parent_pid_file_readable = false,
 	};
 }
 

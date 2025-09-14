@@ -32,7 +32,7 @@
 .Nd run detached from the controlling terminal
 .Sh SYNOPSIS
 .Nm
-.Op Fl cfHrS
+.Op Fl cfHrSG
 .Op Fl p Ar child_pidfile
 .Op Fl P Ar supervisor_pidfile
 .Op Fl t Ar title
@@ -168,6 +168,8 @@ Valid values are 1-31536000 (up to 1 year).
 .It Fl r , Fl -restart
 Supervise and restart the program after a one-second delay if it has
 been terminated.
+.It Fl G , Fl -supervisor-pidfile-readable
+Make supervisor pidfile permissions 644 instead of 600.
 .It Fl S , Fl -syslog
 Enable syslog output.
 This is implicitly applied if other syslog parameters are provided.
